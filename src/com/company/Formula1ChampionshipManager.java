@@ -4,6 +4,7 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.*;
+import java.lang.reflect.Array;
 import java.text.Normalizer;
 import java.util.*;
 import javax.swing.*;
@@ -19,8 +20,12 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
 //    positions (in addition to the table of standings), in order to be able to verify the
 //    correctness of your code for the updated information of the table. (8 marks).
 
+    final int MAX_NO_DRIVERS = 10;
     ArrayList<Formula1Driver> drivers = new ArrayList<>();
+
     File driverData = new File("driverData.txt");
+    File driverDataBackup = new File("driverDataBackup.txt");
+
 //    File raceRound = new File("raceRound.txt");
 //    File dates = new File("dates.txt");
 
@@ -28,39 +33,49 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
     JFrame frame;
     JTable table;
 
-    JButton buttonOrderTableDesc;
-    JButton buttonOrderTableAsc;
-    JButton buttonOrderTableFirstWinsDesc;
+    JMenuBar menuBar;
+    JMenu resetData;
+    JMenuItem reset;
+
+    JButton buttonOrderTableDesc = new JButton("Order Table by Points (Desc)");
+    JButton buttonOrderTableAsc = new JButton("Order Table by Points (Asc)");
+    JButton buttonOrderTableFirstWinsDesc = new JButton("Order Table by First Wins");
     JButton buttonRace = new JButton("Lets race!");
+    JButton buttonBoostedRace = new JButton("Boosted race!");
 
     JPanel tablePanel = new JPanel();
     JPanel menuPanel = new JPanel();
     JPanel titlePanel = new JPanel();
+    JPanel raceDisplayPanel = new JPanel();
     JLabel titleLabel = new JLabel("Formula 1 Championship");
+    JLabel[] raceLabel = new JLabel[MAX_NO_DRIVERS];
 
     public static void main(String[] args) throws FileNotFoundException {
-
-        Formula1ChampionshipManager manager = new Formula1ChampionshipManager();
-        //
-        manager.orderTableDesc(manager.table);
+        new Formula1ChampionshipManager();
     }
 
     // run main GUI using constructor
     public Formula1ChampionshipManager() throws FileNotFoundException {
-        // load data from driverData.txt into arrayList drivers
-        loadData();
         // creating main frame window to add all components
         frame = new JFrame("Formula 1 Championship Manager 2021");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        // setting up menuBar
+        menuBar = new JMenuBar();
+        frame.setJMenuBar(menuBar);
+        resetData = new JMenu("Reset Data");
+        menuBar.add(resetData);
+        reset = new JMenuItem("Reset all values");
+        resetData.add(reset);
+        reset.addActionListener(this);
+
         // setting cosmetics for title panel
         titlePanel.add(titleLabel);
         titlePanel.setBorder(BorderFactory.createEtchedBorder());
+
         // setting menuPanel layout
         menuPanel.setLayout(new BoxLayout(menuPanel, BoxLayout.Y_AXIS));
+
         // adding menu buttons to menuPanel and adding action listeners to register events
-        buttonOrderTableDesc = new JButton("Order Table by Points (Desc)");
-        buttonOrderTableAsc = new JButton("Order Table by Points (Asc)");
-        buttonOrderTableFirstWinsDesc = new JButton("Order Table by First Wins");
         menuPanel.add(buttonOrderTableDesc);
         buttonOrderTableDesc.addActionListener(this);
         menuPanel.add(buttonOrderTableAsc);
@@ -69,6 +84,9 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
         buttonOrderTableFirstWinsDesc.addActionListener(this);
         menuPanel.add(buttonRace);
         buttonRace.addActionListener(this);
+        menuPanel.add(buttonBoostedRace);
+        buttonBoostedRace.addActionListener(this);
+
         // design for menu button panel
         menuPanel.setBackground(Color.lightGray);
         menuPanel.setBorder(BorderFactory.createMatteBorder(270, 30, 200, 30, Color.lightGray));
@@ -92,14 +110,34 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
         //Create the scroll pane and add the table to it.
         JScrollPane scrollPane = new JScrollPane(table);
         tablePanel.add(scrollPane);
-        tablePanel.setBackground(Color.white);
+        tablePanel.setBackground(Color.lightGray);
+
+
         // assigning panels to top, bottom, left etc. areas of the frame container
+        frame.getContentPane().add(raceDisplayPanel, "Center");
         frame.getContentPane().add(tablePanel, "South");
         frame.getContentPane().add(titlePanel, "North");
         frame.getContentPane().add(menuPanel, "West");
 
+        // init JLabels used to display race results to raceDisplayPanel.
 
-        frame.setSize(1280, 720);
+        for (int i = 0; i < MAX_NO_DRIVERS; i++) {
+            raceLabel[i] = new JLabel();
+            raceLabel[i].setFont(new Font("Sans-Serif", Font.BOLD, 14));
+            raceDisplayPanel.add(raceLabel[i]);
+        }
+
+        // load in data from driverData.txt into drivers ArrayList to be used in races and in cases of previous records.
+        loadDataToDrivers(driverData);
+        updateTableAtRun();
+
+        // Adding panel to display result of race
+        raceDisplayPanel.setLayout(new BoxLayout(raceDisplayPanel, BoxLayout.Y_AXIS));
+        raceDisplayPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+//        raceDisplayPanel.add(raceDisplayLabel[0]); // look at the forum answer, array of j labels?
+
+//        frame.setResizable(false);
+        frame.setSize(1280, 900);
 //        frame.pack();
         frame.setVisible(true);
 
@@ -110,7 +148,7 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
         try {
             if (e.getSource() == buttonOrderTableDesc) {
 
-                orderTableDesc(table);
+                orderTableDesc();
                 System.out.println("buttonOrderTableDesc");
 
             } else if (e.getSource() == buttonOrderTableAsc) {
@@ -127,20 +165,47 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
 
                 race();
                 System.out.println("buttonRace");
+
+            } else if (e.getSource() == reset) {
+                resetValues();
+                orderTableDesc();
+                System.out.println("Reset all values");
+            } else if (e.getSource() == buttonBoostedRace) {
+                boostedRace();
+//                orderTableDesc();
+                System.out.println("buttonBoostedRace");
             }
-        } catch (FileNotFoundException ex) {
+        } catch (IOException ex) {
             ex.printStackTrace();
         }
 
     }
 
+    public void updateTableAtRun() throws FileNotFoundException {
+        Scanner driverScan = new Scanner(driverData);
+        for (int i = 0; i < 10; i++) { // 10 rows
+            for (int j = 0; j < 9; j++) { // 9 columns
+                table.setValueAt(driverScan.nextLine(), i, j);
+            }
+
+        }
+        tablePanel.revalidate();
+        tablePanel.repaint();
+    }
+
+    public void resetValues() { // not doing anything? drivers arraylist stats for all drivers should be set to 0
+        drivers.clear();
+        loadDataToDrivers(driverDataBackup);
+        for (int i = 0; i < MAX_NO_DRIVERS; i++) {
+            raceLabel[i].setText("");
+        }
+    }
+
     @Override
-    public void orderTableDesc(JTable table) throws FileNotFoundException {
-        //sort the unsorted data in Desc order of points
-        Collections.sort(drivers, new TotalPointsComparatorDescending());
-        // write the sorted (desc) data to the driverData txt file
-        saveData();
-        // populate the JTable with new data in descending order,
+    public void orderTableDesc() throws FileNotFoundException {
+        drivers.sort(new TotalPointsComparatorDescending());
+        saveDataToTextFile();
+
         Scanner driverScan = new Scanner(driverData);
         for (int i = 0; i < 10; i++) { // 10 rows
             for (int j = 0; j < 9; j++) { // 9 columns
@@ -156,9 +221,9 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
 
     @Override
     public void orderTableAsc(JTable table) throws FileNotFoundException {
-        Collections.sort(drivers, new TotalPointsComparatorAscending());
-        // write the sorted (Asc) data to the driverData txt file
-        saveData();
+        drivers.sort(new TotalPointsComparatorAscending());
+        // write (save) the sorted (Asc) data to the driverData txt file
+        saveDataToTextFile();
         // populate the JTable with new data in ascending order,
         Scanner driverScan = new Scanner(driverData);
         for (int i = 0; i < 10; i++) { // 10 rows
@@ -174,9 +239,9 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
 
     @Override
     public void orderTableFirstWinsDesc(JTable table) throws FileNotFoundException {
-        Collections.sort(drivers, new FirstPosWinsComparatorDescending());
+        drivers.sort(new FirstPosWinsComparatorDescending());
         // write the sorted (desc) data to the driverData txt file
-        saveData();
+        saveDataToTextFile();
         // populate the JTable with new data in descending order,
         Scanner driverScan = new Scanner(driverData);
         for (int i = 0; i < 10; i++) { // 10 rows
@@ -254,15 +319,45 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
 
 
             }
+            raceLabel[i].setText("<html>" + "<br>" + drivers.get(driverIndex.get(i)).getName() + "        [" +
+                    drivers.get(driverIndex.get(i)).getTeam() + "]"
+                    + "<br>Position: " + (i + 1));
         }
         try {
-            saveData();
-//            orderTableDesc(table);
+            // update driverData.txt file with new statistics from drivers array-list Formula1Driver objects
+            saveDataToTextFile();
+            // by default, update the table ordered by descending order for viewer to verify points
+            orderTableDesc();
         } catch (FileNotFoundException e) {
             e.printStackTrace();
         }
 //            raceRound++;
 
+    }
+
+    public void boostedRace() {
+        Formula1Driver[] randomlySetDriverPositions = new Formula1Driver[MAX_NO_DRIVERS];
+        ArrayList<Integer> driverIndex = new ArrayList<>();
+        Random rand = new Random();
+        // same result as shuffling to a deck of cards numbered 0-9
+        for (int i; driverIndex.size() != 10; ) { // populating driverIndex with uniquely random ints 0-9
+            i = rand.nextInt(drivers.size());
+            if (driverIndex.contains(i)) {
+                while (driverIndex.contains(i)) {
+                    i = rand.nextInt(drivers.size());
+                }
+                //while loop breaks, then we add driver to driverIndex arrayList
+            }
+            driverIndex.add(i);
+        }
+
+        for (int i = 0; i < drivers.size(); i++) {
+            randomlySetDriverPositions[i] = drivers.get(driverIndex.get(i));
+        }
+        System.out.println(driverIndex);
+        for (Formula1Driver f : randomlySetDriverPositions) {
+            System.out.println(f.getName());
+        }
     }
 
     @Override
@@ -271,7 +366,7 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
     }
 
     @Override
-    public void saveData() throws FileNotFoundException {
+    public void saveDataToTextFile() throws FileNotFoundException {
         try {
             // create the writer to print to .txt file
             BufferedWriter driverWriter = new BufferedWriter(new FileWriter(driverData));
@@ -293,7 +388,6 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
 
                 }
             }
-            // closing file connection
             driverWriter.close();
 //            raceRoundWriter.close();
 
@@ -303,10 +397,10 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
     }
 
     @Override
-    public void loadData() throws FileNotFoundException { // for loading data into ArrayList
+    public void loadDataToDrivers(File file) { // for loading data into ArrayList
         try {
 
-            Scanner driverScan = new Scanner(driverData);
+            Scanner driverScan = new Scanner(file);
 //            Scanner raceRoundScan = new Scanner(savedRaceRound);
 //            Scanner raceDateScan = new Scanner(dates);
 //            while (raceRoundScan.hasNext()) { // own while loop for getting raceRound int from .txt
@@ -315,17 +409,17 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
 //            }
 
             while (driverScan.hasNext()) {
-                String fileLine1 = driverScan.nextLine();
-                String fileLine2 = driverScan.nextLine();
-                String fileLine3 = driverScan.nextLine();
-                String fileLine4 = driverScan.nextLine();
-                String fileLine5 = driverScan.nextLine();
-                String fileLine6 = driverScan.nextLine();
-                String fileLine7 = driverScan.nextLine();
-                String fileLine8 = driverScan.nextLine();
-                String fileLine9 = driverScan.nextLine();
+                String fName = driverScan.nextLine();
+                String lName = driverScan.nextLine();
+                String team = driverScan.nextLine();
+                String country = driverScan.nextLine();
+                String totalPoints = driverScan.nextLine();
+                String firstPosWins = driverScan.nextLine();
+                String secondPosWins = driverScan.nextLine();
+                String thirdPosWins = driverScan.nextLine();
+                String racesCompleted = driverScan.nextLine();
 
-                drivers.add(new Formula1Driver(fileLine1, fileLine2, fileLine3, fileLine4, Integer.parseInt(fileLine5), Integer.parseInt(fileLine6), Integer.parseInt(fileLine7), Integer.parseInt(fileLine8), Integer.parseInt(fileLine9)));
+                drivers.add(new Formula1Driver(fName, lName, team, country, Integer.parseInt(totalPoints), Integer.parseInt(firstPosWins), Integer.parseInt(secondPosWins), Integer.parseInt(thirdPosWins), Integer.parseInt(racesCompleted)));
 
             }
         } catch (Exception e) {
@@ -336,7 +430,6 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
 
 }
 
-// potential reference for comparator for displayTable: https://stackoverflow.com/questions/2839137/how-to-use-comparator-in-java-to-sort
 class TotalPointsComparatorDescending implements Comparator<Formula1Driver> {
     public int compare(Formula1Driver d1, Formula1Driver d2) {
         return d1.getTotalPoints() == d2.getTotalPoints() ? d2.getFirstPosCount() - d1.getFirstPosCount() : d2.getTotalPoints()
@@ -353,7 +446,7 @@ class TotalPointsComparatorAscending implements Comparator<Formula1Driver> {
 
 class FirstPosWinsComparatorDescending implements Comparator<Formula1Driver> {
     public int compare(Formula1Driver d1, Formula1Driver d2) {
-        return d2.getFirstPosCount() - d1.getFirstPosCount();
+        return d1.getFirstPosCount() == d2.getFirstPosCount() ? d2.getTotalPoints() - d1.getTotalPoints() : d2.getFirstPosCount() - d1.getFirstPosCount();
     }
 }
 

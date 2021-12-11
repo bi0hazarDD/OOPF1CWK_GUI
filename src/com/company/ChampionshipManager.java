@@ -1,6 +1,7 @@
 package com.company;
 
 import javax.swing.*;
+import java.io.File;
 import java.io.FileNotFoundException;
 
 public interface ChampionshipManager {
@@ -8,7 +9,7 @@ public interface ChampionshipManager {
 
     void displayStats();
 
-    void orderTableDesc(JTable table) throws FileNotFoundException;
+    void orderTableDesc() throws FileNotFoundException;
 
     void orderTableAsc(JTable table) throws FileNotFoundException;
 
@@ -16,8 +17,8 @@ public interface ChampionshipManager {
 
     void race();
 
-    void saveData() throws FileNotFoundException;
+    void saveDataToTextFile() throws FileNotFoundException;
 
-    void loadData() throws FileNotFoundException;
+    void loadDataToDrivers(File file) throws FileNotFoundException;
 
 }

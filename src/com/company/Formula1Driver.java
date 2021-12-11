@@ -9,23 +9,14 @@ public class Formula1Driver extends Driver {
     private int totalPoints;
     private int racesCount;
 
-    public Formula1Driver(String fName, String lName, String country, String team) {
-        super(fName, lName, country);
-        this.team = team;
-        this.firstPosCount = 0;
-        this.secondPosCount = 0;
-        this.thirdPosCount = 0;
-        this.totalPoints = 0;
-        this.racesCount = 0;
-    }
 
-    public Formula1Driver(String fName, String lName, String country, String team, int firstPosCount, int secondPosCount, int thirdPosCount, int totalPoints, int racesCount) {
+    public Formula1Driver(String fName, String lName, String country, String team, int totalPoints, int firstPosCount, int secondPosCount, int thirdPosCount, int racesCount) {
         super(fName, lName, country);
         this.team = team;
+        this.totalPoints = totalPoints;
         this.firstPosCount = firstPosCount;
         this.secondPosCount = secondPosCount;
         this.thirdPosCount = thirdPosCount;
-        this.totalPoints = totalPoints;
         this.racesCount = racesCount;
     }
 
@@ -53,9 +44,9 @@ public class Formula1Driver extends Driver {
         return racesCount;
     }
 
-    public void setTeam(String team) {
-        this.team = team;
-    }
+//    public void setTeam(String team) {
+//        this.team = team;
+//    }
 
     public void setFirstPosCount(int firstPosCount) {
         this.firstPosCount += firstPosCount;

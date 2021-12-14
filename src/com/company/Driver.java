@@ -26,16 +26,4 @@ public abstract class Driver {
     public String getLName() {
         return lName;
     }
-
-    public void setFName(String fName) {
-        this.fName = fName;
-    }
-
-    public void setLName(String lName) {
-        this.lName = lName;
-    }
-
-    public void setCountry(String country) {
-        this.country = country;
-    }
 }

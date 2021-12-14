@@ -4,31 +4,26 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.*;
-import java.lang.reflect.Array;
-import java.text.Normalizer;
 import java.util.*;
 import javax.swing.*;
-import javax.swing.border.Border;
 
 public class Formula1ChampionshipManager extends JPanel implements ChampionshipManager, ActionListener {
-//    Add a button which every time it is pressed it generates one random race with random
-//    positions achieved by the existing drivers. This automatically updates the Formula 1
-//    championship table by adding the race (points, positions and other statistics). The
-//    positions should be entirely random and not hardcoded in your source code. The
-//    button should generate a diferent race with diferent driver positions every time it is
-//    clicked. The user should be able to see the randomly generated race with the driver
-//    positions (in addition to the table of standings), in order to be able to verify the
-//    correctness of your code for the updated information of the table. (8 marks).
 
     final int MAX_NO_DRIVERS = 10;
+    final int MAX_NO_ROUNDS = 15;
     ArrayList<Formula1Driver> drivers = new ArrayList<>();
-
+    // defining file names for easy use in methods at later stages
     File driverData = new File("driverData.txt");
     File driverDataBackup = new File("driverDataBackup.txt");
-
-//    File raceRound = new File("raceRound.txt");
-//    File dates = new File("dates.txt");
-
+    File raceRoundSaved = new File("raceRound.txt");
+    // Specific dates for when the next race occurs is found using raceRound tracker.
+    String[][] dates = {{"03", "04", "2021"}, {"10", "04", "2021"}, {"17", "04", "2021"}, {"24", "04", "2021"}, {"31", "04", "2021"},
+            {"07", "05", "2021"}, {"07", "05", "2021"}, {"14", "05", "2021"}, {"21", "05", "2021"}, {"28", "05", "2021"},
+            {"04", "06", "2021"}, {"11", "06", "2021"}, {"18", "06", "2021"}, {"25", "06", "2021"}, {"01", "07", "2021"}};
+    private int raceRound = 0;
+    private int day;
+    private int month;
+    private int year;
 
     JFrame frame;
     JTable table;
@@ -36,30 +31,35 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
     JMenuBar menuBar;
     JMenu resetData;
     JMenuItem reset;
-
+    // initialise all buttons
     JButton buttonOrderTableDesc = new JButton("Order Table by Points (Desc)");
     JButton buttonOrderTableAsc = new JButton("Order Table by Points (Asc)");
     JButton buttonOrderTableFirstWinsDesc = new JButton("Order Table by First Wins");
     JButton buttonRace = new JButton("Lets race!");
     JButton buttonBoostedRace = new JButton("Boosted race!");
-
+    JButton buttonRaceHistory = new JButton("View Race History!");
+    JButton buttonSearchDriver = new JButton("Search");
+    JTextField searchDriver = new JTextField();
+    //initialise all main panels and labels in GUI.
     JPanel tablePanel = new JPanel();
     JPanel menuPanel = new JPanel();
     JPanel titlePanel = new JPanel();
     JPanel raceDisplayPanel = new JPanel();
     JLabel titleLabel = new JLabel("Formula 1 Championship");
-    JLabel[] raceLabel = new JLabel[MAX_NO_DRIVERS];
+    JLabel dateLabel = new JLabel();
+    JLabel[] raceLabel = new JLabel[MAX_NO_ROUNDS];
 
+    // run GUI in main method.
     public static void main(String[] args) throws FileNotFoundException {
         new Formula1ChampionshipManager();
     }
 
-    // run main GUI using constructor
+    // run main GUI using constructor.
     public Formula1ChampionshipManager() throws FileNotFoundException {
         // creating main frame window to add all components
         frame = new JFrame("Formula 1 Championship Manager 2021");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        // setting up menuBar
+        // setting up menuBar.
         menuBar = new JMenuBar();
         frame.setJMenuBar(menuBar);
         resetData = new JMenu("Reset Data");
@@ -68,14 +68,12 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
         resetData.add(reset);
         reset.addActionListener(this);
 
-        // setting cosmetics for title panel
+        // setting cosmetics for title panel.
         titlePanel.add(titleLabel);
         titlePanel.setBorder(BorderFactory.createEtchedBorder());
 
-        // setting menuPanel layout
+        // adding menu buttons in vertical axis to menuPanel and adding action listeners to register events
         menuPanel.setLayout(new BoxLayout(menuPanel, BoxLayout.Y_AXIS));
-
-        // adding menu buttons to menuPanel and adding action listeners to register events
         menuPanel.add(buttonOrderTableDesc);
         buttonOrderTableDesc.addActionListener(this);
         menuPanel.add(buttonOrderTableAsc);
@@ -84,13 +82,20 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
         buttonOrderTableFirstWinsDesc.addActionListener(this);
         menuPanel.add(buttonRace);
         buttonRace.addActionListener(this);
+        menuPanel.add((buttonRaceHistory));
+        buttonRaceHistory.addActionListener(this);
         menuPanel.add(buttonBoostedRace);
         buttonBoostedRace.addActionListener(this);
+        //title panel placed north of the frame
+        titlePanel.add(buttonSearchDriver);
+        buttonSearchDriver.addActionListener(this);
+        searchDriver.setPreferredSize(new Dimension(250, 30));
+        titlePanel.add(searchDriver);
 
         // design for menu button panel
         menuPanel.setBackground(Color.lightGray);
         menuPanel.setBorder(BorderFactory.createMatteBorder(270, 30, 200, 30, Color.lightGray));
-        //creating JTable contents
+        //creating JTable contents, currently empty values but is then loaded in from a file to fill in table as GUI is launched.
         String[] columnNames = {"First Name",
                 "Last Name",
                 "Country",
@@ -119,26 +124,29 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
         frame.getContentPane().add(titlePanel, "North");
         frame.getContentPane().add(menuPanel, "West");
 
-        // init JLabels used to display race results to raceDisplayPanel.
 
-        for (int i = 0; i < MAX_NO_DRIVERS; i++) {
+        dateLabel.setFont(new Font("Sans-Serif", Font.BOLD, 14));
+        raceDisplayPanel.add(dateLabel);
+        // initialise JLabels used to display race results to raceDisplayPanel.
+        for (int i = 0; i < MAX_NO_ROUNDS; i++) {
             raceLabel[i] = new JLabel();
             raceLabel[i].setFont(new Font("Sans-Serif", Font.BOLD, 14));
             raceDisplayPanel.add(raceLabel[i]);
         }
-
+        // NOTE:
         // load in data from driverData.txt into drivers ArrayList to be used in races and in cases of previous records.
+        // i.e., any previous runs of the program will be saved, and if the program is launched again, those records are
+        // automatically fed into the program. If reset is desired, use menu function in top left of GUI.
         loadDataToDrivers(driverData);
         updateTableAtRun();
 
         // Adding panel to display result of race
         raceDisplayPanel.setLayout(new BoxLayout(raceDisplayPanel, BoxLayout.Y_AXIS));
         raceDisplayPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-//        raceDisplayPanel.add(raceDisplayLabel[0]); // look at the forum answer, array of j labels?
-
-//        frame.setResizable(false);
+        // setting to disable editing cells in table
+        table.setDefaultEditor(Object.class, null);
+        frame.setResizable(false);
         frame.setSize(1280, 900);
-//        frame.pack();
         frame.setVisible(true);
 
     }
@@ -147,33 +155,23 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
     public void actionPerformed(ActionEvent e) {
         try {
             if (e.getSource() == buttonOrderTableDesc) {
-
                 orderTableDesc();
-                System.out.println("buttonOrderTableDesc");
-
             } else if (e.getSource() == buttonOrderTableAsc) {
-
                 orderTableAsc(table);
-                System.out.println("buttonOrderTableAsc");
-
             } else if (e.getSource() == buttonOrderTableFirstWinsDesc) {
-
                 orderTableFirstWinsDesc(table);
-                System.out.println("buttonOrderTableFirstWinsDesc");
-
             } else if (e.getSource() == buttonRace) {
-
                 race();
-                System.out.println("buttonRace");
-
             } else if (e.getSource() == reset) {
                 resetValues();
                 orderTableDesc();
-                System.out.println("Reset all values");
             } else if (e.getSource() == buttonBoostedRace) {
                 boostedRace();
-//                orderTableDesc();
-                System.out.println("buttonBoostedRace");
+                orderTableDesc();
+            } else if (e.getSource() == buttonSearchDriver) {
+
+            } else if (e.getSource() == buttonRaceHistory) {
+                displayRaceHistory();
             }
         } catch (IOException ex) {
             ex.printStackTrace();
@@ -181,7 +179,28 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
 
     }
 
+    public void displayRaceHistory() {
+        if (raceRound == 0) {
+            JOptionPane.showMessageDialog(null, "No races have taken place yet. No history to show!"
+                    , "No races available", JOptionPane.WARNING_MESSAGE);
+        } else {
+            dateLabel.setText("");
+            // clearing panel of any positions from races, clean page
+            for (int i = 0; i < MAX_NO_DRIVERS; i++) {
+                raceLabel[i].setText("");
+            }
+            //displaying all the current dates in ascending order using raceRound tracker
+            for (int i = 0; i < raceRound; i++) {
+                raceLabel[i].setText("<html>" + "Race round: " + (i + 1) + " of the season" + "<br>" +
+                        "Date race took place: " + dates[i][0] + "/" + dates[i][1] + "/" + dates[i][2] + "<br>");
+            }
+
+        }
+    }
+
+
     public void updateTableAtRun() throws FileNotFoundException {
+        //populates the table with empty values for statistics, but fills up drivers, ready to take races.
         Scanner driverScan = new Scanner(driverData);
         for (int i = 0; i < 10; i++) { // 10 rows
             for (int j = 0; j < 9; j++) { // 9 columns
@@ -189,26 +208,34 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
             }
 
         }
+        // used to update table state
         tablePanel.revalidate();
         tablePanel.repaint();
     }
 
-    public void resetValues() { // not doing anything? drivers arraylist stats for all drivers should be set to 0
+    public void resetValues() {
+        // drivers array list (Formula1Driver objects) are cleared and re-populated again with set names and empty values.
         drivers.clear();
         loadDataToDrivers(driverDataBackup);
-        for (int i = 0; i < MAX_NO_DRIVERS; i++) {
+        // clearing page of any remaining text labels
+        for (int i = 0; i < MAX_NO_ROUNDS; i++) {
             raceLabel[i].setText("");
         }
+        dateLabel.setText("");
+        raceRound = 0;
+        JOptionPane.showMessageDialog(null, "All values for statistics in the season have been reset.", "Successful reset",
+                JOptionPane.INFORMATION_MESSAGE);
     }
 
     @Override
     public void orderTableDesc() throws FileNotFoundException {
+        // sort objects in regard to points in descending order then write sorted data to text file
         drivers.sort(new TotalPointsComparatorDescending());
         saveDataToTextFile();
-
+        // read in sorted data from text file and re-populate table with updated values
         Scanner driverScan = new Scanner(driverData);
-        for (int i = 0; i < 10; i++) { // 10 rows
-            for (int j = 0; j < 9; j++) { // 9 columns
+        for (int i = 0; i < MAX_NO_DRIVERS; i++) { // 10 rows (drivers)
+            for (int j = 0; j < 9; j++) { // 9 columns (values)
                 table.setValueAt(driverScan.nextLine(), i, j);
             }
 
@@ -221,12 +248,12 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
 
     @Override
     public void orderTableAsc(JTable table) throws FileNotFoundException {
+        // sort objects regarding points in ascending order then write sorted data to text file
         drivers.sort(new TotalPointsComparatorAscending());
-        // write (save) the sorted (Asc) data to the driverData txt file
         saveDataToTextFile();
-        // populate the JTable with new data in ascending order,
+        // read in sorted data from text file and re-populate table with updated values
         Scanner driverScan = new Scanner(driverData);
-        for (int i = 0; i < 10; i++) { // 10 rows
+        for (int i = 0; i < MAX_NO_DRIVERS; i++) { // 10 rows
             for (int j = 0; j < 9; j++) { // 9 columns
                 table.setValueAt(driverScan.nextLine(), i, j);
             }
@@ -239,12 +266,12 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
 
     @Override
     public void orderTableFirstWinsDesc(JTable table) throws FileNotFoundException {
+        // sort objects in regards to first wins count in descending order then write sorted data to text file
         drivers.sort(new FirstPosWinsComparatorDescending());
-        // write the sorted (desc) data to the driverData txt file
         saveDataToTextFile();
-        // populate the JTable with new data in descending order,
+        // read in sorted data from text file and re-populate table with updated values
         Scanner driverScan = new Scanner(driverData);
-        for (int i = 0; i < 10; i++) { // 10 rows
+        for (int i = 0; i < MAX_NO_DRIVERS; i++) { // 10 rows
             for (int j = 0; j < 9; j++) { // 9 columns
                 table.setValueAt(driverScan.nextLine(), i, j);
             }
@@ -258,120 +285,318 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
 
     @Override
     public void race() {
-        ArrayList<Integer> driverIndex = new ArrayList<>();
-        Random rand = new Random();
-        // same result as shuffling to a deck of cards numbered 0-9
-        for (int i; driverIndex.size() != 10; ) { // populating driverIndex with uniquely random ints 0-9
-            i = rand.nextInt(drivers.size());
-            if (driverIndex.contains(i)) {
-                while (driverIndex.contains(i)) {
-                    i = rand.nextInt(drivers.size());
+
+        if (raceRound < MAX_NO_ROUNDS) {
+            // clearing panel of any positions from races, clean page
+            for (int i = 0; i < MAX_NO_ROUNDS; i++) {
+                raceLabel[i].setText("");
+            }
+            // creating array to hold random numbers which will pick a random driver from main arraylist of objects
+            // to be placed 1st, 2nd , 3rd etc.
+            ArrayList<Integer> driverIndex = new ArrayList<>();
+            Random rand = new Random();
+
+            for (int i; driverIndex.size() != 10; ) { // populating driverIndex with uniquely random ints 0-9
+                i = rand.nextInt(drivers.size());
+                if (driverIndex.contains(i)) {
+                    while (driverIndex.contains(i)) {
+                        i = rand.nextInt(drivers.size());
+                    }
+                    //while loop breaks, then we add driver to driverIndex arrayList
                 }
-                //while loop breaks, then we add driver to driverIndex arrayList
+                driverIndex.add(i);
             }
-            driverIndex.add(i);
-        }
-        for (int i = 0; i < drivers.size(); i++) {
-            switch (i) {
-                case 0: // winning 1st position
-                    drivers.get(driverIndex.get(i)).setFirstPosCount(1);
-                    drivers.get(driverIndex.get(i)).setRacesCount(1);
-                    drivers.get(driverIndex.get(i)).setTotalPoints(25);
-                    break;
-                case 1: // winning 2nd position
-                    drivers.get(driverIndex.get(i)).setSecondPosCount(1);
-                    drivers.get(driverIndex.get(i)).setRacesCount(1);
-                    drivers.get(driverIndex.get(i)).setTotalPoints(18);
-                    break;
-                case 2: // winning 3rd position
-                    drivers.get(driverIndex.get(i)).setThirdPosCount(1);
-                    drivers.get(driverIndex.get(i)).setRacesCount(1);
-                    drivers.get(driverIndex.get(i)).setTotalPoints(15);
-                    break;
-                case 3: // winning 4th position
-                    drivers.get(driverIndex.get(i)).setRacesCount(1);
-                    drivers.get(driverIndex.get(i)).setTotalPoints(12);
-                    break;
-                case 4: // winning 5th position
-                    drivers.get(driverIndex.get(i)).setRacesCount(1);
-                    drivers.get(driverIndex.get(i)).setTotalPoints(10);
-                    break;
-                case 5: // winning 6th position
-                    drivers.get(driverIndex.get(i)).setRacesCount(1);
-                    drivers.get(driverIndex.get(i)).setTotalPoints(8);
-                    break;
-                case 6: // winning 7th position
-                    drivers.get(driverIndex.get(i)).setRacesCount(1);
-                    drivers.get(driverIndex.get(i)).setTotalPoints(6);
-                    break;
-                case 7: // winning 8th position
-                    drivers.get(driverIndex.get(i)).setRacesCount(1);
-                    drivers.get(driverIndex.get(i)).setTotalPoints(4);
-                    break;
-                case 8: // winning 9th position
-                    drivers.get(driverIndex.get(i)).setRacesCount(1);
-                    drivers.get(driverIndex.get(i)).setTotalPoints(2);
-                    break;
-                case 9: // winning 10th position
-                    drivers.get(driverIndex.get(i)).setRacesCount(1);
-                    drivers.get(driverIndex.get(i)).setTotalPoints(1);
-                    break;
+            // assignment of respective points using index of a random integer from driverIndex to choose which driver
+            // from "drivers" array list of objects will be 1st, 2nd, 3rd, etc...
+            for (int i = 0; i < drivers.size(); i++) {
+                switch (i) {
+                    case 0: // finishing 1st position
+                        drivers.get(driverIndex.get(i)).setFirstPosCount(1);
+                        drivers.get(driverIndex.get(i)).setRacesCount(1);
+                        drivers.get(driverIndex.get(i)).setTotalPoints(25);
+                        break;
+                    case 1: // finishing 2nd position
+                        drivers.get(driverIndex.get(i)).setSecondPosCount(1);
+                        drivers.get(driverIndex.get(i)).setRacesCount(1);
+                        drivers.get(driverIndex.get(i)).setTotalPoints(18);
+                        break;
+                    case 2: // finishing 3rd position
+                        drivers.get(driverIndex.get(i)).setThirdPosCount(1);
+                        drivers.get(driverIndex.get(i)).setRacesCount(1);
+                        drivers.get(driverIndex.get(i)).setTotalPoints(15);
+                        break;
+                    case 3: // finishing 4th position
+                        drivers.get(driverIndex.get(i)).setRacesCount(1);
+                        drivers.get(driverIndex.get(i)).setTotalPoints(12);
+                        break;
+                    case 4: // finishing 5th position
+                        drivers.get(driverIndex.get(i)).setRacesCount(1);
+                        drivers.get(driverIndex.get(i)).setTotalPoints(10);
+                        break;
+                    case 5: // finishing 6th position
+                        drivers.get(driverIndex.get(i)).setRacesCount(1);
+                        drivers.get(driverIndex.get(i)).setTotalPoints(8);
+                        break;
+                    case 6: // finishing 7th position
+                        drivers.get(driverIndex.get(i)).setRacesCount(1);
+                        drivers.get(driverIndex.get(i)).setTotalPoints(6);
+                        break;
+                    case 7: // finishing 8th position
+                        drivers.get(driverIndex.get(i)).setRacesCount(1);
+                        drivers.get(driverIndex.get(i)).setTotalPoints(4);
+                        break;
+                    case 8: // finishing 9th position
+                        drivers.get(driverIndex.get(i)).setRacesCount(1);
+                        drivers.get(driverIndex.get(i)).setTotalPoints(2);
+                        break;
+                    case 9: // finishing 10th position
+                        drivers.get(driverIndex.get(i)).setRacesCount(1);
+                        drivers.get(driverIndex.get(i)).setTotalPoints(1);
+                        break;
 
 
+                }
+                // display results of positions and drivers in the raceDisplayPanel
+                raceLabel[i].setText("<html>" + "<br>" + drivers.get(driverIndex.get(i)).getName() + "        [" +
+                        drivers.get(driverIndex.get(i)).getTeam() + "]"
+                        + "<br>Position: " + (i + 1));
             }
-            raceLabel[i].setText("<html>" + "<br>" + drivers.get(driverIndex.get(i)).getName() + "        [" +
-                    drivers.get(driverIndex.get(i)).getTeam() + "]"
-                    + "<br>Position: " + (i + 1));
+            // finding which date the race is currently it on and displaying it in the raceDisplayPanel
+            day = Integer.parseInt(dates[raceRound][0]);
+            month = Integer.parseInt(dates[raceRound][1]);
+            year = Integer.parseInt(dates[raceRound][2]);
+
+            raceRound++;
+            dateLabel.setText("Round " + String.valueOf(raceRound) + " of the season. Date: --- " + day + "/" + month + "/" +
+                    year + " ---");
+
+            try {
+                // update driverData.txt file with new statistics from drivers array-list Formula1Driver objects
+                saveDataToTextFile();
+                // by default, update the table ordered by descending order for viewer to verify points
+                orderTableDesc();
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            }
+
+        } else {
+            JOptionPane.showMessageDialog(null, "The season has ended! Cannot race anymore."
+                    , "Cannot race!", JOptionPane.WARNING_MESSAGE);
         }
-        try {
-            // update driverData.txt file with new statistics from drivers array-list Formula1Driver objects
-            saveDataToTextFile();
-            // by default, update the table ordered by descending order for viewer to verify points
-            orderTableDesc();
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }
-//            raceRound++;
 
     }
 
     public void boostedRace() {
-        Formula1Driver[] randomlySetDriverPositions = new Formula1Driver[MAX_NO_DRIVERS];
-        ArrayList<Integer> driverIndex = new ArrayList<>();
-        Random rand = new Random();
-        // same result as shuffling to a deck of cards numbered 0-9
-        for (int i; driverIndex.size() != 10; ) { // populating driverIndex with uniquely random ints 0-9
-            i = rand.nextInt(drivers.size());
-            if (driverIndex.contains(i)) {
-                while (driverIndex.contains(i)) {
-                    i = rand.nextInt(drivers.size());
-                }
-                //while loop breaks, then we add driver to driverIndex arrayList
+
+        if (raceRound < MAX_NO_ROUNDS) {
+            // clearing panel of any positions from races, clean page
+            for (int i = 0; i < MAX_NO_ROUNDS; i++) {
+                raceLabel[i].setText("");
             }
-            driverIndex.add(i);
-        }
+            // arraylist to assign randomly picked drivers in 1st pos, 2nd pos, 3rd pos, etc...
+            ArrayList<Formula1Driver> randomlySetDriverPositions = new ArrayList<>();
+            ArrayList<Integer> driverIndex = new ArrayList<>();
+            Random rand = new Random();
+            // defining main random number generator used to calculate who will win first position based on chance
+            double rng = Math.random();
+            rng = Math.round(rng * 100.0) / 100.0;
 
-        for (int i = 0; i < drivers.size(); i++) {
-            randomlySetDriverPositions[i] = drivers.get(driverIndex.get(i));
-        }
-        System.out.println(driverIndex);
-        for (Formula1Driver f : randomlySetDriverPositions) {
-            System.out.println(f.getName());
-        }
-    }
+            for (int i; driverIndex.size() != 10; ) { // populating driverIndex with uniquely random ints 0-9
+                i = rand.nextInt(drivers.size());
+                if (driverIndex.contains(i)) {
+                    while (driverIndex.contains(i)) {
+                        i = rand.nextInt(drivers.size());
+                    }
+                    //while loop breaks as it is a unique int, so we add driver to driverIndex arrayList as seen below
+                }
+                driverIndex.add(i);
+            }
+            //populating array of random driver starting positions of all 10 drivers, although driver 10 has 0% chance.
+            // Driver in 0th index will be in first position (40% chance to win), 1st index driver will be starting in second position
+            // (30% chance to win), etc...
+            for (int i = 0; i < drivers.size(); i++) {
+                randomlySetDriverPositions.add(drivers.get(driverIndex.get(i)));
+            }
+            // ease of access to view results correlate correctly in console (positions still displayed in GUI).
+            System.out.println(rng);
+            System.out.println(driverIndex);
+            for (Formula1Driver f : randomlySetDriverPositions) {
+                System.out.println(f.getName());
+            }
+            // Conditions to check who will win based on RNG.
+            if (rng >= 0.6 && rng <= 1.0) { // 40% chance: driver in 1st pos (STARTING POSITION etc.)
+                randomlySetDriverPositions.get(0).setTotalPoints(25);
+                randomlySetDriverPositions.get(0).setFirstPosCount(1);
+                randomlySetDriverPositions.get(0).setRacesCount(1);
+                raceLabel[0].setText("<html>" + "<br>" + randomlySetDriverPositions.get(0).getName() + "        [" +
+                        randomlySetDriverPositions.get(0).getTeam() + "]"
+                        + "<br>Position: " + (1));
+                // removing winning driver as the rest of the drivers must be randomised, do not want to include winner.
+                randomlySetDriverPositions.remove(0);
+            }
+            if (rng >= 0.3 && rng <= 0.6) { // 30% chance: driver in 2nd pos.
+                randomlySetDriverPositions.get(1).setTotalPoints(25);
+                randomlySetDriverPositions.get(1).setFirstPosCount(1);
+                randomlySetDriverPositions.get(1).setRacesCount(1);
+                raceLabel[0].setText("<html>" + "<br>" + randomlySetDriverPositions.get(1).getName() + "        [" +
+                        randomlySetDriverPositions.get(1).getTeam() + "]"
+                        + "<br>Position: " + (1));
+                randomlySetDriverPositions.remove(1);
+            }
+            if (rng >= 0.2 && rng <= 0.3) { // 10% chance: driver in 3rd pos.
+                randomlySetDriverPositions.get(2).setTotalPoints(25);
+                randomlySetDriverPositions.get(2).setFirstPosCount(1);
+                randomlySetDriverPositions.get(2).setRacesCount(1);
+                raceLabel[0].setText("<html>" + "<br>" + randomlySetDriverPositions.get(2).getName() + "        [" +
+                        randomlySetDriverPositions.get(2).getTeam() + "]"
+                        + "<br>Position: " + (1));
+                randomlySetDriverPositions.remove(2);
+            }
+            if (rng >= 0.1 && rng <= 0.2) { // 10% chance: driver in 4th pos.
+                randomlySetDriverPositions.get(3).setTotalPoints(25);
+                randomlySetDriverPositions.get(3).setFirstPosCount(1);
+                randomlySetDriverPositions.get(3).setRacesCount(1);
+                raceLabel[0].setText("<html>" + "<br>" + randomlySetDriverPositions.get(3).getName() + "        [" +
+                        randomlySetDriverPositions.get(3).getTeam() + "]"
+                        + "<br>Position: " + (1));
+                randomlySetDriverPositions.remove(3);
+            }
 
-    @Override
-    public void displayStats() { // text field for selected driver?
+            if (rng >= 0.08 && rng <= 0.1) { // 2% chance: driver in 5th pos.
+                randomlySetDriverPositions.get(4).setTotalPoints(25);
+                randomlySetDriverPositions.get(4).setFirstPosCount(1);
+                randomlySetDriverPositions.get(4).setRacesCount(1);
+                raceLabel[0].setText("<html>" + "<br>" + randomlySetDriverPositions.get(4).getName() + "        [" +
+                        randomlySetDriverPositions.get(4).getTeam() + "]"
+                        + "<br>Position: " + (1));
+                randomlySetDriverPositions.remove(4);
+            }
+            if (rng >= 0.06 && rng <= 0.08) { // 2% chance: driver in 6th pos.
+                randomlySetDriverPositions.get(5).setTotalPoints(25);
+                randomlySetDriverPositions.get(5).setFirstPosCount(1);
+                randomlySetDriverPositions.get(5).setRacesCount(1);
+                raceLabel[0].setText("<html>" + "<br>" + randomlySetDriverPositions.get(5).getName() + "        [" +
+                        randomlySetDriverPositions.get(5).getTeam() + "]"
+                        + "<br>Position: " + (1));
+                randomlySetDriverPositions.remove(5);
+            }
+
+            if (rng >= 0.04 && rng <= 0.06) { // 2% chance: driver in 7th pos.
+                randomlySetDriverPositions.get(6).setTotalPoints(25);
+                randomlySetDriverPositions.get(6).setFirstPosCount(1);
+                randomlySetDriverPositions.get(6).setRacesCount(1);
+                raceLabel[0].setText("<html>" + "<br>" + randomlySetDriverPositions.get(6).getName() + "        [" +
+                        randomlySetDriverPositions.get(6).getTeam() + "]"
+                        + "<br>Position: " + (1));
+                randomlySetDriverPositions.remove(6);
+            }
+
+            if (rng >= 0.02 && rng <= 0.04) { // 2% chance: driver in 8th pos.
+                randomlySetDriverPositions.get(7).setTotalPoints(25);
+                randomlySetDriverPositions.get(7).setFirstPosCount(1);
+                randomlySetDriverPositions.get(7).setRacesCount(1);
+                raceLabel[0].setText("<html>" + "<br>" + randomlySetDriverPositions.get(7).getName() + "        [" +
+                        randomlySetDriverPositions.get(7).getTeam() + "]"
+                        + "<br>Position: " + (1));
+                randomlySetDriverPositions.remove(7);
+            }
+            if (rng >= 0.00 && rng <= 0.02) { // 2% chance: driver in 9th pos.
+                randomlySetDriverPositions.get(8).setTotalPoints(25);
+                randomlySetDriverPositions.get(8).setFirstPosCount(1);
+                randomlySetDriverPositions.get(8).setRacesCount(1);
+                raceLabel[0].setText("<html>" + "<br>" + randomlySetDriverPositions.get(8).getName() + "        [" +
+                        randomlySetDriverPositions.get(8).getTeam() + "]"
+                        + "<br>Position: " + (1));
+                randomlySetDriverPositions.remove(8);
+            }   //0% chance: driver in 10th position
+
+            // assigning the rest of the drivers their respective points for the race
+            // Shuffle means to now say that the rest of the drivers have raced, here are their finishing positions for this
+            // race.
+            Collections.shuffle(randomlySetDriverPositions);
+            // ease of access for testing purposes in console (drivers still display and table is updated)
+            System.out.println("--- randomlySetDriverPositions---");
+            for (Formula1Driver f : randomlySetDriverPositions) {
+                System.out.println(f.getName());
+            }
+            // as the array was shuffled as seen above, the drivers are no longer in chronological order; they are in
+            // random finishing positions. Points are now assigned to respective finishing positions
+            for (int i = 0; i < randomlySetDriverPositions.size(); i++) {
+                switch (i) {
+                    case 0: // finishing in 2nd position
+                        randomlySetDriverPositions.get(i).setTotalPoints(18);
+                        randomlySetDriverPositions.get(i).setSecondPosCount(1);
+                        randomlySetDriverPositions.get(i).setRacesCount(1);
+                        break;
+                    case 1: // finishing in 3rd position
+                        randomlySetDriverPositions.get(i).setTotalPoints(15);
+                        randomlySetDriverPositions.get(i).setThirdPosCount(1);
+                        randomlySetDriverPositions.get(i).setRacesCount(1);
+                        break;
+                    case 2: // finishing in 4th position
+                        randomlySetDriverPositions.get(i).setTotalPoints(12);
+                        randomlySetDriverPositions.get(i).setRacesCount(1);
+                        break;
+                    case 3: // finishing in 5th position
+                        randomlySetDriverPositions.get(i).setTotalPoints(10);
+                        randomlySetDriverPositions.get(i).setRacesCount(1);
+                        break;
+                    case 4: // finishing in 6th position
+                        randomlySetDriverPositions.get(i).setTotalPoints(8);
+                        randomlySetDriverPositions.get(i).setRacesCount(1);
+                        break;
+                    case 5: // finishing in 7th position
+                        randomlySetDriverPositions.get(i).setTotalPoints(6);
+                        randomlySetDriverPositions.get(i).setRacesCount(1);
+                        break;
+                    case 6: // finishing in 8th position
+                        randomlySetDriverPositions.get(i).setTotalPoints(4);
+                        randomlySetDriverPositions.get(i).setRacesCount(1);
+                        break;
+                    case 7: // finishing in 9th position
+                        randomlySetDriverPositions.get(i).setTotalPoints(2);
+                        randomlySetDriverPositions.get(i).setRacesCount(1);
+                        break;
+                    case 8: // finishing in 10th position
+                        randomlySetDriverPositions.get(i).setTotalPoints(1);
+                        randomlySetDriverPositions.get(i).setRacesCount(1);
+                        break;
+                }
+                raceLabel[i + 1].setText("<html>" + "<br>" + randomlySetDriverPositions.get(i).getName() + "        [" +
+                        randomlySetDriverPositions.get(i).getTeam() + "]"
+                        + "<br>Position: " + (i + 2));
+            }
+            try {
+                // update driverData.txt file with new statistics from "drivers" array-list Formula1Driver objects
+                saveDataToTextFile();
+                // by default, update the table ordered by descending order for viewer to verify points
+                orderTableDesc();
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            }
+
+            day = Integer.parseInt(dates[raceRound][0]);
+            month = Integer.parseInt(dates[raceRound][1]);
+            year = Integer.parseInt(dates[raceRound][2]);
+
+            raceRound++;
+            dateLabel.setText("Round " + (raceRound) + " of the season. Date: --- " + day + "/" + month + "/" +
+                    year + " ---");
+
+        } else {
+            JOptionPane.showMessageDialog(null, "The season has ended! Cannot race anymore."
+                    , "Cannot race!", JOptionPane.WARNING_MESSAGE);
+        }
 
     }
 
     @Override
     public void saveDataToTextFile() throws FileNotFoundException {
         try {
-            // create the writer to print to .txt file
+            BufferedWriter raceRoundWriter = new BufferedWriter(new FileWriter(raceRoundSaved));
+            raceRoundWriter.write(Integer.toString(raceRound));
+
             BufferedWriter driverWriter = new BufferedWriter(new FileWriter(driverData));
-//            BufferedWriter raceRoundWriter = new BufferedWriter(new FileWriter(raceRound));
-//            raceRoundWriter.write(Integer.toString(raceRound));
             //loop through array. Write the elements to the file
             for (int i = 0; i < drivers.size(); i++) {
                 if (drivers.get(i) != null) {
@@ -389,7 +614,7 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
                 }
             }
             driverWriter.close();
-//            raceRoundWriter.close();
+            raceRoundWriter.close();
 
         } catch (Exception e) {
             System.out.println(e.getMessage());
@@ -397,16 +622,16 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
     }
 
     @Override
-    public void loadDataToDrivers(File file) { // for loading data into ArrayList
+    public void loadDataToDrivers(File file) { // for loading data into ArrayList, "drivers". Used when populating the
+        // table with default values (first time run).
         try {
 
             Scanner driverScan = new Scanner(file);
-//            Scanner raceRoundScan = new Scanner(savedRaceRound);
-//            Scanner raceDateScan = new Scanner(dates);
-//            while (raceRoundScan.hasNext()) { // own while loop for getting raceRound int from .txt
-//                String raceRoundTemp = raceRoundScan.nextLine();
-//                raceRound = Integer.parseInt(raceRoundTemp);
-//            }
+            Scanner raceRoundScan = new Scanner(raceRoundSaved);
+
+            while (raceRoundScan.hasNext()) {
+                raceRound = Integer.parseInt(raceRoundScan.nextLine());
+            }
 
             while (driverScan.hasNext()) {
                 String fName = driverScan.nextLine();
@@ -418,7 +643,7 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
                 String secondPosWins = driverScan.nextLine();
                 String thirdPosWins = driverScan.nextLine();
                 String racesCompleted = driverScan.nextLine();
-
+                // "drivers" arraylist initialised with pre-set data of driver names , country etc., and empty values for points etc...
                 drivers.add(new Formula1Driver(fName, lName, team, country, Integer.parseInt(totalPoints), Integer.parseInt(firstPosWins), Integer.parseInt(secondPosWins), Integer.parseInt(thirdPosWins), Integer.parseInt(racesCompleted)));
 
             }
@@ -430,6 +655,7 @@ public class Formula1ChampionshipManager extends JPanel implements ChampionshipM
 
 }
 
+// 3 separate classes used for sorting the table using Comparator interface.
 class TotalPointsComparatorDescending implements Comparator<Formula1Driver> {
     public int compare(Formula1Driver d1, Formula1Driver d2) {
         return d1.getTotalPoints() == d2.getTotalPoints() ? d2.getFirstPosCount() - d1.getFirstPosCount() : d2.getTotalPoints()
@@ -449,344 +675,3 @@ class FirstPosWinsComparatorDescending implements Comparator<Formula1Driver> {
         return d1.getFirstPosCount() == d2.getFirstPosCount() ? d2.getTotalPoints() - d1.getTotalPoints() : d2.getFirstPosCount() - d1.getFirstPosCount();
     }
 }
-
-//    File savedDriverData = new File("savedData.txt");
-//    File savedRaceRound = new File("savedRaceRound.txt");
-//    private ArrayList<Formula1Driver> drivers = new ArrayList<>();
-//    private final int MAX_DRIVERS_COUNT = 10;
-//    private int raceRound = 0;
-//
-//    public static void main(String[] args) {
-//        boolean loop = true;
-//        Formula1ChampionshipManager manager = new Formula1ChampionshipManager();
-//        try {
-//            manager.loadData(); // reads all information saved in the previous file (resume/recover previous state)
-//
-//            while (loop) {
-//                Scanner scanner = new Scanner(System.in);
-//                System.out.println("Welcome to the F1 Championship menu!");
-//                manager.menu();
-//
-//                switch (Integer.parseInt(scanner.next())) {
-//                    case 1:
-//                        manager.createDriver();
-//                        break;
-//                    case 2:
-//                        manager.deleteDriver();
-//                        break;
-//                    case 3:
-//                        manager.changeDriver();
-//                        break;
-//                    case 4:
-//                        manager.displayStats();
-//                        break;
-//                    case 5:
-//                        manager.displayTable();
-//                        break;
-//                    case 6:
-//                        manager.race();
-//                        break;
-//                    case 7:
-//                        manager.saveData();
-//                        break;
-//                    case 8:
-//                        System.out.println("Goodbye!");
-//                        loop = false;
-//                        break;
-//
-//                    default:
-//                        System.out.println("Please select a value from 1-9");
-//                        break;
-//                }
-//            }
-//        } catch (NumberFormatException | FileNotFoundException fnf) {
-//            System.out.println("Invalid input entered, please enter an integer.");
-//        }
-//    }
-//
-//
-//    @Override
-//    public void createDriver() {
-//        Scanner input = new Scanner(System.in);
-//        if (drivers.size() < MAX_DRIVERS_COUNT) {
-//
-//            System.out.println("Enter first name of driver: ");
-//            String fName = input.nextLine();
-//            System.out.println("Enter last name of driver: ");
-//            String lName = input.nextLine();
-//            System.out.println("Enter country where driver is from: ");
-//            String country = input.nextLine();
-//            System.out.println("Enter driver's team: ");
-//            String team = input.nextLine(); // if statement to check if trying to add someone on a team that already exists?
-//            System.out.println("Enter total points : ");
-//
-//            drivers.add(new Formula1Driver(fName, lName, country, team));
-//
-//            System.out.println(fName + " " + lName + " from " + country + " on team " + team +
-//                    " has been added to the championship!");
-//
-//        } else {
-//            System.out.println("Reached maximum no. of drivers allowed in the championship! " +
-//                    "You may remove a driver to free up space.");
-//        }
-//
-//
-//    }
-//
-//    @Override
-//    public void deleteDriver() {
-//        Scanner input = new Scanner(System.in);
-//        try {
-//            displayTable();
-//            System.out.println("Select a Driver by their Driver Number to remove them from the championship: ");
-//            int user_choice = input.nextInt();
-//            if (!(user_choice > 0 && user_choice <= 10)) {
-//                System.out.println("Incorrect range entered. Only 1-10");
-//            } else {
-//                System.out.println("F1 Driver, " + drivers.get(user_choice - 1).getName() + ", has been removed from the" +
-//                        " championship.");
-//                drivers.remove(user_choice - 1);
-//            }
-//
-//        } catch (Exception e) {
-//            System.out.println("Could not find existing Driver Number. Please enter an integer to identify a driver in the list.");
-//            input.nextLine();
-//        }
-//    }
-//
-//    @Override
-//    public void changeDriver() { // this only swaps their position in the list.. doesnt actually swap teams?
-//        // done that so they basicaly only swap teams... now, also swap points too? or leave it?
-//        // NEED TO FIX: Driver should not be able to swap with themselves
-//        Scanner input = new Scanner(System.in);
-//        try {
-//            displayTable();
-//            System.out.println("Select first Driver Number to swap: ");
-//            int driver1 = input.nextInt();
-//            System.out.println("Select second Driver Number to swap: ");
-//            int driver2 = input.nextInt();
-//            if (!(driver1 > 0 && driver1 <= 10) && !(driver2 > 0 && driver2 <= 10)) {
-//                System.out.println("Incorrect range entered. Enter an integer from 1-10.");
-//            } else {
-//                //better way of assigning values to temp maybe? ask adam... this works tho for now
-//                Formula1Driver temp = new Formula1Driver(drivers.get(driver1 - 1).getFName(), drivers.get(driver1 - 1).getLName(), drivers.get(driver1 - 1).getCountry(), drivers.get(driver1 - 1).getTeam());
-//                drivers.get(driver1 - 1).setFName(drivers.get(driver2 - 1).getFName());
-//                drivers.get(driver1 - 1).setLName(drivers.get(driver2 - 1).getLName());
-//                drivers.get(driver1 - 1).setCountry(drivers.get(driver2 - 1).getCountry());
-////                drivers.get(driver1 - 1).setTeam(drivers.get(driver2 - 1).getTeam());
-//
-//                drivers.get(driver2 - 1).setFName(temp.getFName());
-//                drivers.get(driver2 - 1).setLName(temp.getLName());
-//                drivers.get(driver2 - 1).setCountry(temp.getCountry());
-////                drivers.get(driver2 - 1).setTeam(temp.getTeam());
-//
-//                System.out.println("F1 Driver, " + drivers.get(driver2 - 1).getName() + " , of team " +
-//                        drivers.get(driver2 - 1).getTeam() + " has been SWAPPED with \nF1 Driver, " + drivers.get(driver1 - 1).getName() +
-//                        " , of team " + drivers.get(driver1 - 1).getTeam() + "!");
-//            }
-//
-//        } catch (Exception e) {
-//            System.out.println("Could not find existing Driver Number. Please enter an integer to identify a driver in the list.");
-//            input.nextLine();
-//        }
-//
-//    }
-//
-//    @Override
-//    public void displayStats() {
-//        Scanner input = new Scanner(System.in);
-//        System.out.println("\nSearch for a Driver by entering their first then last name.\n");
-//        System.out.println("Please select a Driver by their first name: ");
-//        String fName = input.nextLine();
-//        System.out.println("Please select a Driver by their last name: ");
-//        String lName = input.nextLine();
-//        fName = fName.toLowerCase();
-//        lName = lName.toLowerCase();
-//        boolean isMatching = false;
-//        for (Formula1Driver f : drivers) {
-//            if (f.getFName().toLowerCase().equals(fName) && f.getLName().toLowerCase().equals(lName)) {
-//                System.out.println("\n|=======+==================================+=======|\n");
-//                System.out.println("Driver: " + f.getName() + "\nCountry: " + f.getCountry() + "\nTeam: "
-//                        + f.getTeam() + "\nFirst position wins: " + f.getFirstPosCount() + "\nSecond position wins: " +
-//                        f.getSecondPosCount() + "\nThird position wins: " + f.getThirdPosCount() + "\nTotal Points: "
-//                        + f.getTotalPoints() + "\nRaces completed: " + f.getRacesCount());
-//                isMatching = true;
-//                System.out.println("\n|=======+==================================+=======|\n");
-//            }
-//        }
-//        if (!isMatching) {
-//            System.out.println("No Driver was found. First or last name may have been entered incorrectly.\n");
-//
-//        }
-//    }
-//
-//    @Override
-//    public void displayTable() {
-//        System.out.println("\n|=======+==================================+=======|\n");
-//        drivers.sort(new TotalPointsComparator());
-//        for (int i = 0; i < drivers.size(); i++) {
-//            System.out.println("Driver Number = " + (i + 1));
-//            System.out.println("Driver: " + drivers.get(i).getName() + "\nCountry: " + drivers.get(i).getCountry() + "\n" +
-//                    "Team: " + drivers.get(i).getTeam() + "\nTotal Points this season: " + drivers.get(i).getTotalPoints() +
-//                    "\nFirst Position wins: " + drivers.get(i).getFirstPosCount() + "\nSecond Position wins: " + drivers.get(i).getSecondPosCount()
-//                    + "\nThird Position wins: " + drivers.get(i).getThirdPosCount()
-//                    + "\nRaces completed: " + drivers.get(i).getRacesCount() + "\n");
-//        }
-//        System.out.println("|=======+==================================+=======|\n");
-//    }
-//
-//    @Override
-//    public void race() { // need to display positions of all drivers, and the current date of the race, current round?
-//        int difference = MAX_DRIVERS_COUNT - drivers.size();
-//
-//        if (drivers.size() < MAX_DRIVERS_COUNT) {
-//            System.out.println("\n|=======+==================================+=======|\n");
-//            System.out.println("Cannot race yet --- Please add " + difference + " more driver(s)!\n");
-//            System.out.println("|=======+==================================+=======|\n");
-//        } else {
-//            ArrayList<Integer> driverIndex = new ArrayList<>();
-//            Random rand = new Random();
-//            for (int i; driverIndex.size() != 10; ) { // populating driverIndex with uniquely random ints 0-9
-//                i = rand.nextInt(drivers.size());
-//                if (driverIndex.contains(i)) {
-//                    while (driverIndex.contains(i)) {
-//                        i = rand.nextInt(drivers.size());
-//                    }
-//                    //while loop breaks, then we add driver to driverIndex arrayList
-//                }
-//                driverIndex.add(i);
-//            }
-//            for (int i = 0; i < drivers.size(); i++) {
-//                System.out.println(driverIndex);
-//                switch (i) {
-//                    case 0: // winning 1st position
-//                        drivers.get(driverIndex.get(i)).setFirstPosCount(1);
-//                        drivers.get(driverIndex.get(i)).setRacesCount(1);
-//                        drivers.get(driverIndex.get(i)).setTotalPoints(25);
-//                        break;
-//                    case 1: // winning 2nd position
-//                        drivers.get(driverIndex.get(i)).setSecondPosCount(1);
-//                        drivers.get(driverIndex.get(i)).setRacesCount(1);
-//                        drivers.get(driverIndex.get(i)).setTotalPoints(18);
-//                        break;
-//                    case 2: // winning 3rd position
-//                        drivers.get(driverIndex.get(i)).setThirdPosCount(1);
-//                        drivers.get(driverIndex.get(i)).setRacesCount(1);
-//                        drivers.get(driverIndex.get(i)).setTotalPoints(15);
-//                        break;
-//                    case 3: // winning 4th position
-//                        drivers.get(driverIndex.get(i)).setRacesCount(1);
-//                        drivers.get(driverIndex.get(i)).setTotalPoints(12);
-//                        break;
-//                    case 4: // winning 5th position
-//                        drivers.get(driverIndex.get(i)).setRacesCount(1);
-//                        drivers.get(driverIndex.get(i)).setTotalPoints(10);
-//                        break;
-//                    case 5: // winning 6th position
-//                        drivers.get(driverIndex.get(i)).setRacesCount(1);
-//                        drivers.get(driverIndex.get(i)).setTotalPoints(8);
-//                        break;
-//                    case 6: // winning 7th position
-//                        drivers.get(driverIndex.get(i)).setRacesCount(1);
-//                        drivers.get(driverIndex.get(i)).setTotalPoints(6);
-//                        break;
-//                    case 7: // winning 8th position
-//                        drivers.get(driverIndex.get(i)).setRacesCount(1);
-//                        drivers.get(driverIndex.get(i)).setTotalPoints(4);
-//                        break;
-//                    case 8: // winning 9th position
-//                        drivers.get(driverIndex.get(i)).setRacesCount(1);
-//                        drivers.get(driverIndex.get(i)).setTotalPoints(2);
-//                        break;
-//                    case 9: // winning 10th position
-//                        drivers.get(driverIndex.get(i)).setRacesCount(1);
-//                        drivers.get(driverIndex.get(i)).setTotalPoints(1);
-//                        break;
-//
-//
-//                }
-//            }
-//            raceRound++;
-//        }
-//    }
-//
-//    @Override
-//    public void saveData() throws FileNotFoundException { // also save round count? which race its currently on
-//        try {
-//
-//            // create the writer to print to .txt file
-//            BufferedWriter driverWriter = new BufferedWriter(new FileWriter(savedDriverData));
-//            BufferedWriter raceRoundWriter = new BufferedWriter(new FileWriter(savedRaceRound));
-//            raceRoundWriter.write(Integer.toString(raceRound));
-//            //loop through array. Write the elements to the file
-//            for (int i = 0; i < drivers.size(); i++) {
-//                if (drivers.get(i) != null) {
-//                    driverWriter.write(drivers.get(i).getFName() + "\n");
-//                    driverWriter.write(drivers.get(i).getLName() + "\n");
-//                    driverWriter.write(drivers.get(i).getCountry() + "\n");
-//                    driverWriter.write(drivers.get(i).getTeam() + "\n");
-//                    driverWriter.write(drivers.get(i).getFirstPosCount() + "\n");
-//                    driverWriter.write(drivers.get(i).getSecondPosCount() + "\n");
-//                    driverWriter.write(drivers.get(i).getThirdPosCount() + "\n");
-//                    driverWriter.write(drivers.get(i).getTotalPoints() + "\n");
-//                    driverWriter.write(drivers.get(i).getRacesCount() + "\n");
-//
-//
-//                }
-//            }
-//            // closing file connection
-//            driverWriter.close();
-//            raceRoundWriter.close();
-//
-//        } catch (Exception e) {
-//            System.out.println(e.getMessage());
-//        }
-//    }
-//
-//    @Override
-//    public void loadData() throws FileNotFoundException {
-//        try {
-//            if (drivers.size() > 0) { // if current state of data contains drivers, delete them
-//                drivers.clear();
-//            }
-//
-//            Scanner driverScan = new Scanner(savedDriverData);
-//            Scanner raceRoundScan = new Scanner(savedRaceRound);
-//            while (raceRoundScan.hasNext()) {
-//                String raceRoundTemp = raceRoundScan.nextLine();
-//                raceRound = Integer.parseInt(raceRoundTemp);
-//            }
-//
-//            while (driverScan.hasNext()) {
-//                String fileLine1 = driverScan.nextLine();
-//                String fileLine2 = driverScan.nextLine();
-//                String fileLine3 = driverScan.nextLine();
-//                String fileLine4 = driverScan.nextLine();
-//                String fileLine5 = driverScan.nextLine();
-//                String fileLine6 = driverScan.nextLine();
-//                String fileLine7 = driverScan.nextLine();
-//                String fileLine8 = driverScan.nextLine();
-//                String fileLine9 = driverScan.nextLine();
-//
-//                drivers.add(new Formula1Driver(fileLine1, fileLine2, fileLine3, fileLine4, Integer.parseInt(fileLine5), Integer.parseInt(fileLine6), Integer.parseInt(fileLine7), Integer.parseInt(fileLine8), Integer.parseInt(fileLine9)));
-//
-//            }
-//        } catch (Exception e) {
-//            System.out.println(e.getMessage());
-//        }
-//    }
-//
-//    @Override
-//    public void menu() {
-//        System.out.println("--------------------------------------------");
-//        System.out.println("[1]: Create a new driver");
-//        System.out.println("[2]: Delete a driver");
-//        System.out.println("[3]: Change an existing driver");
-//        System.out.println("[4]: Display statistics for a selected driver");
-//        System.out.println("[5]: Display table of statistics for entire competition");
-//        System.out.println("[6]: Launch a race");
-//        System.out.println("[7]: Save current state of competition to memory");
-//        System.out.println("[8]: Exit program");
-//        System.out.println("--------------------------------------------");
-//        System.out.print("Please enter a number: ");
-//    }
